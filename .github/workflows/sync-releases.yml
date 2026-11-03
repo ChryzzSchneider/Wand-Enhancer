@@ -4,7 +4,7 @@ on:
   schedule:
     # Se ejecuta a las 00:00 UTC cada 3 días
     - cron: '0 0 */3 * *'
-  workflow_dispatch: # Mantiene el botón para ejecutarlo manualmente cuando quieras
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -43,31 +43,37 @@ jobs:
           echo "Nuevo release detectado ($UPSTREAM_TAG). Iniciando sincronización..."
 
           RELEASE_TITLE=$(gh api repos/$UPSTREAM_REPO/releases/latest --jq .name)
-          gh api repos/$UPSTREAM_REPO/releases/latest --jq .body > release_notes.md
+          gh api repos/$UPSTREAM_REPO/releases/latest --jq .body > /tmp/release_notes.md
 
           if [ -z "$RELEASE_TITLE" ] || [ "$RELEASE_TITLE" = "null" ]; then
             RELEASE_TITLE="$UPSTREAM_TAG"
           fi
 
-          mkdir -p assets
-          cd assets
+          # Usar un directorio temporal aislado para evitar colisiones con carpetas del repo
+          DOWNLOAD_DIR="/tmp/release_assets"
+          rm -rf "$DOWNLOAD_DIR"
+          mkdir -p "$DOWNLOAD_DIR"
 
           echo "Descargando binarios adjuntos..."
-          gh release download "$UPSTREAM_TAG" --repo "$UPSTREAM_REPO" --dir . || true
+          gh release download "$UPSTREAM_TAG" --repo "$UPSTREAM_REPO" --dir "$DOWNLOAD_DIR" || true
 
-          cd ..
+          DEFAULT_BRANCH=$(gh repo view ${{ github.repository }} --json defaultBranchRef --jq .defaultBranchRef.name)
+          echo "Rama objetivo detectada: $DEFAULT_BRANCH"
+
+          # Filtrar únicamente archivos regulares, ignorando subcarpetas
+          FILE_LIST=$(find "$DOWNLOAD_DIR" -maxdepth 1 -type f)
 
           echo "Publicando release en tu fork..."
-          if [ -n "$(ls -A assets 2>/dev/null)" ]; then
-            gh release create "$UPSTREAM_TAG" assets/* \
-              --target master \
+          if [ -n "$FILE_LIST" ]; then
+            gh release create "$UPSTREAM_TAG" $FILE_LIST \
+              --target "$DEFAULT_BRANCH" \
               --title "$RELEASE_TITLE" \
-              --notes-file release_notes.md
+              --notes-file /tmp/release_notes.md
           else
             gh release create "$UPSTREAM_TAG" \
-              --target master \
+              --target "$DEFAULT_BRANCH" \
               --title "$RELEASE_TITLE" \
-              --notes-file release_notes.md
+              --notes-file /tmp/release_notes.md
           fi
 
           echo "Release $UPSTREAM_TAG replicado exitosamente con sus binarios."
