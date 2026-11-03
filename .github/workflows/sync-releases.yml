@@ -18,7 +18,7 @@ jobs:
 
       - name: Comparar versiones y replicar release
         env:
-          UPSTREAM_REPO: "rushiranpise/Shizuku-Next"
+          UPSTREAM_REPO: "k1tbyte/Wand-Enhancer"
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -e
